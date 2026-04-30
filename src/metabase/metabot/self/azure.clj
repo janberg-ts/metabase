@@ -116,7 +116,6 @@
 																												schema      "required"
 																												tool_choice tool_choice
 																												:else       "auto"))
-											temperature (assoc :temperature temperature)
 											max-tokens  (assoc :max_completion_tokens max-tokens))
 				request-url (str "/openai/deployments/" deployment
 												 "/chat/completions?api-version=" api-version)]
@@ -145,3 +144,4 @@
 	[& args]
 	(let [raw (apply azure-raw args)]
 		(eduction (openrouter/openrouter->aisdk-chunks-xf) raw)))
+-

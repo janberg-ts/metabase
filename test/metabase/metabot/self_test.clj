@@ -7,6 +7,7 @@
    [metabase.analytics-interface.core :as analytics]
    [metabase.analytics.snowplow-test :as snowplow-test]
    [metabase.metabot.self :as self]
+  [metabase.metabot.self.azure :as self.azure]
    [metabase.metabot.self.core :as self.core]
    [metabase.metabot.self.openrouter :as openrouter]
    [metabase.metabot.test-util :as test-util]
@@ -56,6 +57,24 @@
   (testing "returns the local curated Azure model list"
     (is (= ["gpt-5.5" "gpt-5" "gpt-4.1" "gpt-4.1-mini" "gpt-4o" "gpt-4o-mini"]
            (mapv :id (:models (self/list-models "azure")))))))
+
+(deftest azure-raw-omits-temperature-test
+  (testing "Azure requests omit temperature because GPT-5 deployments reject non-default values"
+    (let [captured (atom nil)]
+      (mt/with-dynamic-fn-redefs [http/request (fn [opts]
+                                                 (when-let [body (:body opts)]
+                                                   (reset! captured (json/decode+kw body)))
+                                                 (throw (ex-info "stop" {::skip true :status 401 :body "skip parsing"})))]
+        (mt/with-temporary-setting-values [llm-azure-api-key      "azure-test-key"
+                                           llm-azure-api-base-url "https://example.openai.azure.com"]
+          (try
+            (self.azure/azure-raw {:model       "gpt-5.5"
+                                   :input       [{:role "user" :content "hello"}]
+                                   :temperature 0.3})
+            (catch Exception e
+              (when-not (::skip (ex-data e))
+                (throw e)))))
+        (is (not (contains? @captured :temperature)))))))
 
 (deftest call-llm-tool-choice-test
   (testing "passes required tool choice to LLM providers"
