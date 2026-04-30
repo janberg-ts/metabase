@@ -522,6 +522,9 @@ interface AdminSettings {
 }
 interface SettingsManagerSettings {
   "bcc-enabled?": boolean;
+  "llm-azure-api-base-url"?: string | null;
+  "llm-azure-api-key"?: string | null;
+  "llm-azure-api-version"?: string | null;
   "llm-openai-api-key"?: string;
   "llm-anthropic-api-key"?: string | null;
   "llm-anthropic-api-base-url"?: string | null;
@@ -798,6 +801,9 @@ export interface EnterpriseSettings extends Settings {
   "python-runner-test-run-timeout-seconds"?: number | null;
   "llm-metabot-provider"?: string | null;
   "llm-anthropic-api-key"?: string | null;
+  "llm-azure-api-base-url"?: string | null;
+  "llm-azure-api-key"?: string | null;
+  "llm-azure-api-version"?: string | null;
   "llm-anthropic-model": string;
   "llm-proxy-configured?"?: boolean | null;
   "metabot-slack-signing-secret"?: string | null;

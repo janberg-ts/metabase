@@ -98,11 +98,15 @@
 
 (def ^:private direct-providers
   "Providers that can be used directly (not via the metabase/ proxy prefix)."
-  #{"anthropic" "openai" "openrouter"})
+  #{"anthropic" "azure" "openai" "openrouter"})
 
 (def ^:private default-anthropic-llm-metabot-model
   "Default Anthropic model used for Metabot when no explicit model is selected."
   "claude-sonnet-4-6")
+
+(def ^:private default-azure-llm-metabot-model
+  "Default Azure Foundry model used for Metabot during the initial rollout."
+  "gpt-5.5")
 
 (def default-llm-metabot-provider
   "Default provider/model used for Metabot when no explicit model is selected."
@@ -114,6 +118,7 @@
   Values match the shape expected in the request body for each provider: direct providers use a bare model ID, while the
   managed `metabase` provider uses the proxied `provider/model` form."
   {"anthropic"                       default-anthropic-llm-metabot-model
+   "azure"                           default-azure-llm-metabot-model
    provider-util/metabase-provider-prefix default-llm-metabot-provider})
 
 (def default-metabase-llm-metabot-provider
@@ -233,9 +238,16 @@
   [provider]
   (case provider
     "anthropic"  (llm.settings/llm-anthropic-api-key)
+    "azure"      (llm.settings/llm-azure-api-key)
     "openai"     (llm.settings/llm-openai-api-key)
     "openrouter" (llm.settings/llm-openrouter-api-key)
     nil))
+
+(defn- provider-configured?
+  [provider]
+  (case provider
+    "azure" (some? (llm.settings/llm-azure-api-base-url))
+    true))
 
 (defn- llm-provider-configured?
   "Check if a provider-and-model string has the necessary configuration.
@@ -247,8 +259,11 @@
      (some? (llm.settings/llm-proxy-base-url))
      (some-> provider-and-model
              provider-util/provider-and-model->provider
+         ((fn [provider]
+      (and (provider-configured? provider)
+           (some-> provider
              configured-provider-api-key
-             token-configured?))))
+             token-configured?))))))))
 
 (defsetting llm-metabot-configured?
   "Whether the API key for the selected Metabot provider is configured."

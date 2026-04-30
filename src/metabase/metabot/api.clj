@@ -281,6 +281,7 @@
   [provider]
   (case provider
     "anthropic"  :llm-anthropic-api-key
+    "azure"      :llm-azure-api-key
     "openai"     :llm-openai-api-key
     "openrouter" :llm-openrouter-api-key))
 
@@ -377,8 +378,10 @@
                (:models (metabot.self/list-models "anthropic" {:ai-proxy? true})))}
      (let [effective-api-key (or (non-blank-string api-key-override)
                                  (non-blank-string
-                                  (metabot.settings/configured-provider-api-key provider)))]
-       (if (and provider effective-api-key)
+                                  (metabot.settings/configured-provider-api-key provider)))
+           can-list-models?  (or (= provider "azure")
+                                 effective-api-key)]
+       (if (and provider can-list-models?)
          (try
            {:models (decorate-provider-models
                      provider

@@ -234,6 +234,35 @@
                         :group "Sonnet"}]}
              (mt/user-http-request :crowberto :get 200 "metabot/settings" :provider "anthropic"))))))
 
+  (deftest settings-get-returns-local-azure-models-without-api-key-test
+    (mt/with-temporary-setting-values [metabot.settings/llm-metabot-provider "azure/gpt-5.5"]
+      (with-redefs [metabot.self/list-models (fn
+                                               ([provider]
+                                                (is (= "azure" provider))
+                                                {:models [{:id "gpt-5.5"
+                                                           :display_name "GPT-5.5"
+                                                           :group "GPT-5"}
+                                                          {:id "gpt-5"
+                                                           :display_name "GPT-5"
+                                                           :group "GPT-5"}]})
+                                               ([provider {:keys [api-key]}]
+                                                (is (= "azure" provider))
+                                                (is (nil? api-key))
+                                                {:models [{:id "gpt-5.5"
+                                                           :display_name "GPT-5.5"
+                                                           :group "GPT-5"}
+                                                          {:id "gpt-5"
+                                                           :display_name "GPT-5"
+                                                           :group "GPT-5"}]}))]
+        (is (= {:value  "azure/gpt-5.5"
+                :models [{:id "gpt-5.5"
+                          :display_name "GPT-5.5"
+                          :group "GPT-5"}
+                         {:id "gpt-5"
+                          :display_name "GPT-5"
+                          :group "GPT-5"}]}
+               (mt/user-http-request :crowberto :get 200 "metabot/settings" :provider "azure"))))))
+
 (deftest settings-get-normalizes-legacy-anthropic-ids-test
   (mt/with-temporary-setting-values [llm.settings/llm-anthropic-api-key "sk-ant-valid"]
     (with-redefs [metabot.self/list-models (fn [_provider {:keys [api-key]}]

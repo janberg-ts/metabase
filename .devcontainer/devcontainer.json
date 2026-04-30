@@ -1,21 +1,25 @@
 // https://aka.ms/vscode-remote/devcontainer.json
 {
-	"name": "Node.js",
+	"name": "Metabase Dev",
 	"build": {
 		"dockerfile": "Dockerfile"
 	},
-
-	// Add the IDs of extensions you want installed when the container is created.
-	"extensions": [
-	],
-
-	// Use 'forwardPorts' to make a list of ports inside the container available locally.
-	"forwardPorts": [3000],
-
-	// Comment out the next line to run as root instead.
+	"features": {
+		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+			"moby": false
+		}
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"betterthantomorrow.calva",
+				"ms-azuretools.vscode-docker",
+				"EditorConfig.EditorConfig"
+			]
+		}
+	},
+	"forwardPorts": [3000, 8080],
 	"remoteUser": "vscode",
-
-	"runArgs": ["--network=metabase-dev"],
-
+	"postCreateCommand": "bun install",
 	"postStartCommand": "git config --global --add safe.directory /workspaces/metabase"
 }

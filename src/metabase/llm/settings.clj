@@ -18,6 +18,10 @@
       (throw (ex-info (str deferred-message) {:status-code 400})))
     (setting/set-value-of-type! :string setting-key trimmed)))
 
+(defn- set-trimmed-string!
+  [setting-key new-value]
+  (setting/set-value-of-type! :string setting-key (trimmed-string new-value)))
+
 ;;; ------------------------------------------------- Anthropic -------------------------------------------------
 
 (defsetting llm-anthropic-api-key
@@ -120,6 +124,34 @@
                              "sk-or-v1-"
                              (deferred-tru "Invalid OpenRouter API key format. Key must start with ''sk-or-v1-''."))
   :doc              false)
+
+;;; ------------------------------------------------ Azure Foundry -----------------------------------------------
+
+(defsetting llm-azure-api-base-url
+  (deferred-tru "The Azure Foundry OpenAI-compatible endpoint base URL.")
+  :encryption :no
+  :visibility :settings-manager
+  :default    nil
+  :setter     (partial set-trimmed-string! :llm-azure-api-base-url)
+  :export?    false
+  :doc        false)
+
+(defsetting llm-azure-api-version
+  (deferred-tru "The Azure Foundry API version.")
+  :encryption :no
+  :visibility :settings-manager
+  :default    "2024-12-01-preview"
+  :setter     (partial set-trimmed-string! :llm-azure-api-version)
+  :export?    false
+  :doc        false)
+
+(defsetting llm-azure-api-key
+  (deferred-tru "The Azure Foundry API Key.")
+  :sensitive? true
+  :visibility :settings-manager
+  :export?    false
+  :setter     (partial set-trimmed-string! :llm-azure-api-key)
+  :doc        false)
 
 ;;; --------------------------------------------------- Proxy ---------------------------------------------------
 

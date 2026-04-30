@@ -48,6 +48,14 @@ export function getProviderOptions(
         addKeyUrl: "https://console.anthropic.com/settings/keys",
       },
     },
+    azure: {
+      value: "azure",
+      label: "Azure Foundry",
+      apiKey: {
+        placeholder: "Enter your Azure Foundry API key",
+        addKeyUrl: "https://ai.azure.com/",
+      },
+    },
     openai: {
       value: "openai",
       label: "OpenAI",
@@ -85,14 +93,22 @@ export function isApiKeyMetabotProvider(
 }
 
 export function isAvailableProvider(provider: MetabotProvider): boolean {
-  return provider === "anthropic" || provider === "metabase";
+  return (
+    provider === "anthropic" ||
+    provider === "azure" ||
+    provider === "metabase"
+  );
 }
 
 export const API_KEY_SETTING_BY_PROVIDER: Record<
   MetabotApiKeyProvider,
-  "llm-anthropic-api-key" | "llm-openai-api-key" | "llm-openrouter-api-key"
+  | "llm-anthropic-api-key"
+  | "llm-azure-api-key"
+  | "llm-openai-api-key"
+  | "llm-openrouter-api-key"
 > = {
   anthropic: "llm-anthropic-api-key",
+  azure: "llm-azure-api-key",
   openai: "llm-openai-api-key",
   openrouter: "llm-openrouter-api-key",
 };

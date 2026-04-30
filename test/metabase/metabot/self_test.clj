@@ -22,6 +22,8 @@
   (testing "parses provider/model format correctly"
     (is (=? {:provider "anthropic" :model "claude-haiku-4-5" :ai-proxy? false}
             (#'self/parse-provider-model "anthropic/claude-haiku-4-5")))
+      (is (=? {:provider "azure" :model "gpt-5.5" :ai-proxy? false}
+        (#'self/parse-provider-model "azure/gpt-5.5")))
     (is (=? {:provider "openai" :model "gpt-4.1-mini" :ai-proxy? false}
             (#'self/parse-provider-model "openai/gpt-4.1-mini")))
     (is (=? {:provider "openrouter" :model "anthropic/claude-haiku-4-5" :ai-proxy? false}
@@ -43,11 +45,17 @@
 (deftest ^:parallel resolve-adapter-test
   (testing "resolves known providers to adapter functions"
     (is (fn? (#'self/resolve-adapter "anthropic")))
+    (is (fn? (#'self/resolve-adapter "azure")))
     (is (fn? (#'self/resolve-adapter "openai")))
     (is (fn? (#'self/resolve-adapter "openrouter"))))
   (testing "throws for unknown provider"
     (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Unknown LLM provider"
                           (#'self/resolve-adapter "unknown")))))
+
+(deftest ^:parallel list-models-azure-test
+  (testing "returns the local curated Azure model list"
+    (is (= ["gpt-5.5" "gpt-5" "gpt-4.1" "gpt-4.1-mini" "gpt-4o" "gpt-4o-mini"]
+           (mapv :id (:models (self/list-models "azure")))))))
 
 (deftest call-llm-tool-choice-test
   (testing "passes required tool choice to LLM providers"
@@ -58,11 +66,14 @@
                                                      (reset! captured (json/decode+kw (:body opts))))
                                                    (throw (ex-info "stop" {::skip true :status 401 :body "skip parsing"})))]
           (mt/with-temporary-setting-values [llm-anthropic-api-key  "sk-ant-test-key"
+                                             llm-azure-api-key      "azure-test-key"
+                                             llm-azure-api-base-url "https://example.openai.azure.com"
                                              llm-proxy-base-url     "http://proxy.example"
                                              llm-openrouter-api-key "sk-or-v1-test-key"
                                              llm-openai-api-key     "sk-test-key"]
             (doseq [[model expected] [["anthropic/test-model"   {:type "any"}]
                                       ["metabase/anthropic/claude-sonnet-4-6" {:type "any"}]
+                                      ["azure/test-model"      "required"]
                                       ["openrouter/test-model" "required"]
                                       ["openai/test-model"     "required"]]]
               (try

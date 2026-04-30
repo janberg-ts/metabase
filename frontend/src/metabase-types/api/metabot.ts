@@ -189,6 +189,7 @@ export type MetabotAgentResponse = {
 export type MetabotProvider =
   | "metabase"
   | "anthropic"
+  | "azure"
   | "openai"
   | "openrouter";
 

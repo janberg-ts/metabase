@@ -56,14 +56,22 @@ type MetabotModelOption = ComboboxItem & {
   group?: string | null;
 };
 
+const CUSTOM_AZURE_DEPLOYMENT_GROUP = "Custom";
+
 function getModelDescription(provider: MetabotProvider | undefined) {
   if (provider === "metabase") {
     // eslint-disable-next-line metabase/no-literal-metabase-strings -- Metabase AI service
     return t`Available models are provided by Metabase.`;
   }
 
+  if (provider === "azure") {
+    return t`Select the Azure Foundry deployment name that most closely matches your configured resource.`;
+  }
+
   return t`Available models are fetched from the selected provider using its configured API key.`;
 }
+
+const DEFAULT_AZURE_API_VERSION = "2024-12-01-preview";
 
 const MetabotSetupContext = createContext<{
   connectHandlerRef: MutableRefObject<(() => Promise<void>) | null> | null;
@@ -214,6 +222,7 @@ export function MetabotSetupInner({
 
   const { details: providerApiKeyDetails } = useAdminSettings([
     "llm-anthropic-api-key",
+    "llm-azure-api-key",
     "llm-openai-api-key",
     "llm-openrouter-api-key",
   ] as const);
@@ -439,33 +448,33 @@ const AIProviderSetup = ({
   isEnvSetting: boolean;
 }) => {
   const [model, setModel] = useState<string | undefined>(connectedModel);
+  const [customAzureDeployments, setCustomAzureDeployments] = useState<string[]>(
+    [],
+  );
+  const [customAzureDeploymentInput, setCustomAzureDeploymentInput] = useState("");
   const [apiKeyLocalValue, setApiKeyLocalValue] = useState<string | null>(null);
+  const [azureBaseUrlLocalValue, setAzureBaseUrlLocalValue] = useState<
+    string | null
+  >(null);
+  const [azureApiVersionLocalValue, setAzureApiVersionLocalValue] = useState<
+    string | null
+  >(null);
   const [sendToast] = useToast();
+  const isAzureProvider = selectedProvider === "azure";
 
   useEffect(() => {
     setModel(connectedModel);
   }, [connectedModel]);
 
+  const [updateSettings] = useUpdateSettingsMutation();
   const [updateMetabotSettings, updateMetabotSettingsResult] =
     useUpdateMetabotSettingsMutation();
 
-  const onConnect = async () => {
-    await updateMetabotSettings({
-      provider: selectedProvider,
-      "api-key": apiKeyLocalValue || null,
-    }).unwrap();
-
-    setApiKeyLocalValue(null);
-  };
-
-  const hasDirtyApiKey = apiKeyLocalValue !== null;
-  const connectHandler =
-    !isCurrentConfigured || hasDirtyApiKey ? onConnect : null;
-
-  const { isLoading } = useMetabotSetupContext(connectHandler);
-
   const { details: providerApiKeyDetails } = useAdminSettings([
     "llm-anthropic-api-key",
+    "llm-azure-api-base-url",
+    "llm-azure-api-key",
+    "llm-azure-api-version",
     "llm-openai-api-key",
     "llm-openrouter-api-key",
   ] as const);
@@ -474,18 +483,86 @@ const AIProviderSetup = ({
     providerApiKeyDetails[API_KEY_SETTING_BY_PROVIDER[selectedProvider]];
   const selectedApiKeyValue = String(selectedApiKeySetting?.value ?? "");
   const needsApiKey = !hasConfiguredSettingValue(selectedApiKeySetting);
+  const selectedAzureBaseUrlSetting = providerApiKeyDetails[
+    "llm-azure-api-base-url"
+  ];
+  const selectedAzureApiVersionSetting = providerApiKeyDetails[
+    "llm-azure-api-version"
+  ];
+  const azureBaseUrl =
+    azureBaseUrlLocalValue ?? String(selectedAzureBaseUrlSetting?.value ?? "");
+  const azureApiVersion =
+    azureApiVersionLocalValue ??
+    String(selectedAzureApiVersionSetting?.value ?? DEFAULT_AZURE_API_VERSION);
+  const hasDirtyApiKey = apiKeyLocalValue !== null;
+  const hasDirtyAzureBaseUrl = azureBaseUrlLocalValue !== null;
+  const hasDirtyAzureApiVersion = azureApiVersionLocalValue !== null;
+  const hasDirtyAzureModel = isAzureProvider && model !== connectedModel;
+  const isAzureConnectValid =
+    !isAzureProvider ||
+    (Boolean(model) &&
+      Boolean(azureBaseUrl.trim()) &&
+      (!needsApiKey || Boolean((apiKeyLocalValue ?? "").trim())));
+
+  const onConnect = async () => {
+    if (isAzureProvider) {
+      await updateSettings({
+        "llm-azure-api-base-url": azureBaseUrl,
+        "llm-azure-api-version": azureApiVersion,
+      }).unwrap();
+    }
+
+    await updateMetabotSettings({
+      provider: selectedProvider,
+      ...(hasDirtyApiKey ? { "api-key": apiKeyLocalValue || null } : {}),
+      ...(isAzureProvider && model ? { model } : {}),
+    }).unwrap();
+
+    setApiKeyLocalValue(null);
+    setAzureBaseUrlLocalValue(null);
+    setAzureApiVersionLocalValue(null);
+  };
+
+  const connectHandler =
+    (!isCurrentConfigured ||
+      hasDirtyApiKey ||
+      (isAzureProvider &&
+        (hasDirtyAzureBaseUrl ||
+          hasDirtyAzureApiVersion ||
+          hasDirtyAzureModel))) &&
+    isAzureConnectValid
+      ? onConnect
+      : null;
+
+  const { isLoading } = useMetabotSetupContext(connectHandler);
 
   const metabotSettingsQuery = useGetMetabotSettingsQuery(
     {
       provider: selectedProvider,
     },
-    { skip: needsApiKey },
+    { skip: needsApiKey && !isAzureProvider },
   );
 
   const modelOptions = useMemo(
     () => getLlmModelOptions(metabotSettingsQuery.currentData?.models ?? []),
     [metabotSettingsQuery.currentData?.models],
   );
+
+  const azureDeploymentOptions = useMemo(() => {
+    const deployments = metabotSettingsQuery.currentData?.models ?? [];
+    const knownIds = new Set(deployments.map((deployment) => deployment.id));
+    const extraDeploymentIds = [...new Set([connectedModel, ...customAzureDeployments])]
+      .filter((deployment): deployment is string => Boolean(deployment?.trim()))
+      .filter((deployment) => !knownIds.has(deployment));
+    const extraDeployments = extraDeploymentIds
+      .map((deployment) => ({
+        id: deployment,
+        display_name: deployment,
+        group: CUSTOM_AZURE_DEPLOYMENT_GROUP,
+      }));
+
+    return getLlmModelOptions([...deployments, ...extraDeployments]);
+  }, [connectedModel, customAzureDeployments, metabotSettingsQuery.currentData?.models]);
 
   const modelError = getModelError(
     metabotSettingsQuery.error,
@@ -498,14 +575,39 @@ const AIProviderSetup = ({
     setApiKeyLocalValue(null);
   }, [selectedProvider, selectedApiKeySetting?.value]);
 
+  useEffect(() => {
+    setAzureBaseUrlLocalValue(null);
+    setAzureApiVersionLocalValue(null);
+    setCustomAzureDeployments([]);
+    setCustomAzureDeploymentInput("");
+  }, [
+    selectedProvider,
+    selectedAzureApiVersionSetting?.value,
+    selectedAzureBaseUrlSetting?.value,
+  ]);
+
   const handleApiKeyChange = (event: ChangeEvent<HTMLInputElement>) => {
     setApiKeyLocalValue(event.target.value);
+  };
+
+  const handleAzureBaseUrlChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setAzureBaseUrlLocalValue(event.target.value);
+  };
+
+  const handleAzureApiVersionChange = (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    setAzureApiVersionLocalValue(event.target.value);
   };
 
   const handleModelChange = async (value: string) => {
     setModel(value);
 
     if (!value) {
+      return;
+    }
+
+    if (selectedProvider === "azure") {
       return;
     }
 
@@ -518,6 +620,30 @@ const AIProviderSetup = ({
       message: t`Settings saved successfully`,
       icon: "check",
     });
+  };
+
+  const addCustomAzureDeployment = (value: string) => {
+    const deployment = value.trim();
+
+    if (!deployment) {
+      return;
+    }
+
+    setCustomAzureDeployments((current) =>
+      current.includes(deployment) ? current : [...current, deployment],
+    );
+    setModel(deployment);
+    setCustomAzureDeploymentInput("");
+  };
+
+  const handleCustomAzureDeploymentInputChange = (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    setCustomAzureDeploymentInput(event.target.value);
+  };
+
+  const handleAddCustomAzureDeployment = () => {
+    addCustomAzureDeployment(customAzureDeploymentInput);
   };
 
   const selectedProviderDetails = getProviderOptions(true)[selectedProvider];
@@ -550,7 +676,72 @@ const AIProviderSetup = ({
         <SetByEnvVar varName={selectedApiKeySetting.env_name} />
       ) : null}
 
-      {!needsApiKey && (
+      {isAzureProvider && (
+        <>
+          <TextInput
+            label={t`Endpoint URL`}
+            placeholder={t`https://your-resource.openai.azure.com`}
+            description={t`The Azure Foundry endpoint for your deployment.`}
+            value={azureBaseUrl}
+            onChange={handleAzureBaseUrlChange}
+            disabled={isLoading}
+            w="100%"
+          />
+
+          <TextInput
+            label={t`API version`}
+            placeholder={DEFAULT_AZURE_API_VERSION}
+            description={t`The Azure Foundry API version sent with each request.`}
+            value={azureApiVersion}
+            onChange={handleAzureApiVersionChange}
+            disabled={isLoading}
+            w="100%"
+          />
+
+          <Select
+            label={t`Deployment`}
+            placeholder={
+              metabotSettingsQuery.isFetching
+                ? t`Loading deployments...`
+                : t`Select a deployment`
+            }
+            description={getModelDescription(selectedProvider)}
+            error={modelError}
+            data={azureDeploymentOptions}
+            value={model}
+            onChange={handleModelChange}
+            disabled={isEnvSetting || isLoading}
+            searchable
+            nothingFoundMessage={t`No deployments found`}
+          />
+
+          <Group align="end" gap="sm">
+            <TextInput
+              label={t`Custom deployment`}
+              placeholder={t`Add a deployment name not shown above`}
+              description={t`Use this when your Azure deployment name is not in the suggested list.`}
+              value={customAzureDeploymentInput}
+              onChange={handleCustomAzureDeploymentInputChange}
+              disabled={isEnvSetting || isLoading}
+              flex={1}
+            />
+
+            <Button
+              variant="default"
+              onClick={handleAddCustomAzureDeployment}
+              disabled={
+                isEnvSetting ||
+                isLoading ||
+                !customAzureDeploymentInput.trim()
+              }
+            >
+              {t`Add deployment`}
+            </Button>
+          </Group>
+        </>
+      )}
+
+      {!needsApiKey && !isAzureProvider && (
         <Select
           label={t`Model`}
           placeholder={

@@ -68,6 +68,14 @@ const DEFAULT_RESPONSES: Record<MetabotProvider, MetabotSettingsResponse> = {
       { id: "gpt-4.1", display_name: "GPT-4.1" },
     ],
   },
+  azure: {
+    value: "azure/gpt-5.5",
+    models: [
+      { id: "gpt-5.5", display_name: "GPT-5.5", group: "GPT-5" },
+      { id: "gpt-5", display_name: "GPT-5", group: "GPT-5" },
+      { id: "gpt-4.1", display_name: "GPT-4.1", group: "GPT-4.1" },
+    ],
+  },
   openrouter: {
     value: "openrouter/openai/gpt-4.1-mini",
     models: [
@@ -94,6 +102,9 @@ type MetabotSettingsApiResponse =
 type MetabotSettingKey =
   | "llm-metabot-provider"
   | "llm-anthropic-api-key"
+  | "llm-azure-api-base-url"
+  | "llm-azure-api-key"
+  | "llm-azure-api-version"
   | "llm-openai-api-key"
   | "llm-openrouter-api-key";
 
@@ -170,6 +181,7 @@ async function setup({
 
   const mergedApiKeyValues: Record<MetabotApiKeyProvider, string | null> = {
     anthropic: "**********45",
+    azure: null,
     openai: null,
     openrouter: null,
     ...apiKeyValues,
@@ -217,6 +229,18 @@ async function setup({
     "llm-anthropic-api-key": createMockSettingDefinition({
       key: "llm-anthropic-api-key",
       value: mergedApiKeyValues.anthropic ?? undefined,
+    }),
+    "llm-azure-api-base-url": createMockSettingDefinition({
+      key: "llm-azure-api-base-url",
+      value: undefined,
+    }),
+    "llm-azure-api-key": createMockSettingDefinition({
+      key: "llm-azure-api-key",
+      value: mergedApiKeyValues.azure ?? undefined,
+    }),
+    "llm-azure-api-version": createMockSettingDefinition({
+      key: "llm-azure-api-version",
+      value: "2024-12-01-preview",
     }),
     "llm-openai-api-key": createMockSettingDefinition({
       key: "llm-openai-api-key",
@@ -303,6 +327,8 @@ async function setup({
       const apiKeySettingKey =
         body.provider === "anthropic"
           ? "llm-anthropic-api-key"
+          : body.provider === "azure"
+            ? "llm-azure-api-key"
           : body.provider === "openai"
             ? "llm-openai-api-key"
             : "llm-openrouter-api-key";
@@ -448,6 +474,18 @@ describe("MetabotSetup", () => {
     expect(anthropicOption).not.toHaveAttribute("aria-disabled", "true");
   });
 
+  it("shows Azure Foundry as selectable in the provider dropdown", async () => {
+    await setup({ savedProviderValue: null, isConfigured: false });
+
+    await userEvent.click(screen.getByLabelText("Provider"));
+
+    const azureOption = await screen.findByRole("option", {
+      name: "Azure Foundry",
+    });
+    expect(azureOption).toBeInTheDocument();
+    expect(azureOption).not.toHaveAttribute("aria-disabled", "true");
+  });
+
   it("shows Coming soon for non-Anthropic providers and disables them", async () => {
     await setup({ savedProviderValue: null, isConfigured: false });
 
@@ -464,6 +502,123 @@ describe("MetabotSetup", () => {
     expect(openrouterOption).toHaveAttribute("data-combobox-disabled");
 
     expect(screen.getAllByText("Coming soon")).toHaveLength(2);
+  });
+
+  it("shows manual Azure Foundry fields and saves them on connect", async () => {
+    await setup({
+      savedProviderValue: null,
+      isConfigured: false,
+      apiKeyValues: { azure: null },
+      updateResponse: DEFAULT_RESPONSES.azure,
+    });
+
+    await selectProvider("Azure Foundry");
+
+    await userEvent.type(screen.getByLabelText("API key"), "azure-test-key");
+    await userEvent.type(
+      screen.getByLabelText("Endpoint URL"),
+      "https://example.openai.azure.com",
+    );
+    await userEvent.clear(screen.getByLabelText("API version"));
+    await userEvent.type(
+      screen.getByLabelText("API version"),
+      "2024-12-01-preview",
+    );
+    await userEvent.click(screen.getByLabelText("Deployment"));
+    await userEvent.click(await screen.findByRole("option", { name: "GPT-5" }));
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    await waitFor(() => {
+      expect(fetchMock.callHistory.called("path:/api/setting")).toBe(true);
+      expect(fetchMock.callHistory.called("path:/api/metabot/settings")).toBe(
+        true,
+      );
+    });
+
+    const [settingRequest] = fetchMock.callHistory.calls("path:/api/setting", {
+      method: "PUT",
+    });
+    const [metabotSettingsRequest] = fetchMock.callHistory.calls(
+      "path:/api/metabot/settings",
+      { method: "PUT" },
+    );
+
+    expect(settingRequest?.options?.body).toBe(
+      JSON.stringify({
+        "llm-azure-api-base-url": "https://example.openai.azure.com",
+        "llm-azure-api-version": "2024-12-01-preview",
+      }),
+    );
+    expect(metabotSettingsRequest?.options?.body).toBe(
+      JSON.stringify({
+        provider: "azure",
+        "api-key": "azure-test-key",
+        model: "gpt-5",
+      }),
+    );
+  });
+
+  it("shows locally curated Azure Foundry deployments", async () => {
+    await setup({
+      savedProviderValue: null,
+      isConfigured: false,
+      apiKeyValues: { azure: null },
+      updateResponse: DEFAULT_RESPONSES.azure,
+    });
+
+    await selectProvider("Azure Foundry");
+    await userEvent.click(screen.getByLabelText("Deployment"));
+
+    expect(await screen.findByRole("option", { name: "GPT-5.5" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "GPT-5" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "GPT-4.1" })).toBeInTheDocument();
+  });
+
+  it("allows adding a custom Azure Foundry deployment from the UI", async () => {
+    await setup({
+      savedProviderValue: null,
+      isConfigured: false,
+      apiKeyValues: { azure: null },
+      updateResponse: {
+        value: "azure/gpt-custom-preview",
+        models: DEFAULT_RESPONSES.azure.models,
+      },
+    });
+
+    await selectProvider("Azure Foundry");
+
+    await userEvent.type(screen.getByLabelText("API key"), "azure-test-key");
+    await userEvent.type(
+      screen.getByLabelText("Endpoint URL"),
+      "https://example.openai.azure.com",
+    );
+    await userEvent.type(
+      screen.getByLabelText("Custom deployment"),
+      "gpt-custom-preview",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Add deployment" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+
+    await waitFor(() => {
+      expect(fetchMock.callHistory.called("path:/api/metabot/settings")).toBe(
+        true,
+      );
+    });
+
+    const [metabotSettingsRequest] = fetchMock.callHistory.calls(
+      "path:/api/metabot/settings",
+      { method: "PUT" },
+    );
+
+    expect(metabotSettingsRequest?.options?.body).toBe(
+      JSON.stringify({
+        provider: "azure",
+        "api-key": "azure-test-key",
+        model: "gpt-custom-preview",
+      }),
+    );
   });
 
   it("shows the connected badge with the saved provider and model", async () => {

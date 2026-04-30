@@ -96,6 +96,18 @@
                                        llm-anthropic-api-key "sk-ant-test"]
       (is (true? (metabot.settings/llm-metabot-configured?))))))
 
+(deftest metabot-configured-with-azure-provider-requires-base-url-test
+  (testing "returns false when azure provider has API key but no base URL"
+    (mt/with-temporary-setting-values [llm-metabot-provider "azure/gpt-5.5"
+                                       llm-azure-api-key    "azure-test-key"
+                                       llm-azure-api-base-url nil]
+      (is (false? (metabot.settings/llm-metabot-configured?)))))
+  (testing "returns true when azure provider has API key and base URL"
+    (mt/with-temporary-setting-values [llm-metabot-provider    "azure/gpt-5.5"
+                                       llm-azure-api-key       "azure-test-key"
+                                       llm-azure-api-base-url  "https://example.openai.azure.com"]
+      (is (true? (metabot.settings/llm-metabot-configured?))))))
+
 (deftest metabot-configured-with-direct-provider-no-api-key-test
   (testing "returns false when direct provider has no API key"
     (with-redefs [llm.settings/llm-anthropic-api-key (constantly nil)]
@@ -176,6 +188,16 @@
   (testing "accepts valid direct openai provider string"
     (mt/with-temporary-setting-values [llm-metabot-provider "openai/gpt-4.1-mini"]
       (is (= "openai/gpt-4.1-mini" (metabot.settings/llm-metabot-provider))))))
+
+(deftest validate-metabot-provider-accepts-valid-direct-azure-test
+  (testing "accepts valid direct azure provider string"
+    (mt/with-temporary-setting-values [llm-metabot-provider "azure/gpt-5.5"]
+      (is (= "azure/gpt-5.5" (metabot.settings/llm-metabot-provider))))))
+
+(deftest default-model-for-provider-azure-test
+  (testing "returns the fixed Azure Foundry model"
+    (is (= "gpt-5.5"
+           (metabot.settings/default-model-for-provider "azure")))))
 
 (deftest validate-metabot-provider-accepts-valid-direct-openrouter-test
   (testing "accepts valid direct openrouter provider string"
