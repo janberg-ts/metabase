@@ -13,12 +13,14 @@ export function extractMetabotBufferContext(
   const state = view?.state;
   const selection = state?.selection.main;
   const cursorLine = state?.doc.lineAt(selection!.head);
+  const sourceValue = state?.doc.toString() ?? "";
 
   const buffer: MetabotCodeEditorBufferContext = {
     id: bufferId,
     source: {
       language: "sql",
       database_id: databaseId,
+      value: sourceValue,
     },
     cursor: {
       line: cursorLine?.number ?? 0,

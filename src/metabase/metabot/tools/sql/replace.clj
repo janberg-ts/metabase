@@ -28,11 +28,13 @@
   [{:keys [query-id sql queries-state]}]
   (log/info "Replacing SQL query" {:query-id query-id :sql-length (count sql)})
 
-  ;; Look up query from in-memory state
-  (let [query-id (str query-id)
-        query (get queries-state query-id)]
+  (let [{resolved-query-id :query-id
+         query :query}
+        (metabot.tools.sql.common/resolve-query queries-state query-id)]
     (when-not query
-      (throw (ex-info (tru "Query {0} not found" query-id)
+      (throw (ex-info (if query-id
+                        (tru "Query {0} not found" (str query-id))
+                        (tru "No active SQL editor buffer found"))
                       {:agent-error? true
                        :query-id query-id
                        :available-queries (keys queries-state)})))
@@ -45,7 +47,8 @@
              (when valid?
                (let [;; Replace the SQL content - handle both formats
                      updated-query (metabot.tools.sql.common/update-query-sql query transpiled-sql)]
-                 {:action-result {:query-id      query-id
-                                  :query-content transpiled-sql
-                                  :query         updated-query
-                                  :database      (:database query)}}))))))
+                 {:action-result (cond-> {:query-content transpiled-sql
+                                          :query         updated-query
+                                          :database      (:database query)}
+                                   resolved-query-id
+                                   (assoc :query-id resolved-query-id))}))))))

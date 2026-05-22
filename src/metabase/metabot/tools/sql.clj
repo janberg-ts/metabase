@@ -141,7 +141,7 @@
 
 (def ^:private edit-sql-schema
   [:map {:closed true}
-   [:query_id [:or :string :int]]
+   [:query_id {:optional true} [:or :string :int]]
    [:checklist :string]
    [:edits [:sequential [:map {:closed true}
                          [:old_string :string]
@@ -164,14 +164,15 @@
           {:keys [valid? error-message dialect]} validation-result
           {:keys [query-id query query-content]} action-result]
       (if valid?
-        (let [structured  (assoc action-result :result-type :query)
-              instr       (instructions/edit-sql-query-instructions-for query-id)
-              results-url (streaming/query->question-url query)
+        (let [structured (assoc action-result :result-type :query)
+              instr      (instructions/edit-sql-query-instructions-for query-id)
               buffer-id  (first-code-editor-buffer-id)]
           {:output (format-query-output structured instr)
            :structured-output structured
            :instructions instr
-           :data-parts [(if buffer-id (code-edit-part buffer-id query-content) (streaming/navigate-to-part results-url))]})
+           :data-parts [(if buffer-id
+                          (code-edit-part buffer-id query-content)
+                          (streaming/navigate-to-part (streaming/query->question-url query)))]})
         (let [instr (instructions/sql-validation-error-instructions dialect error-message)]
           {:output (format-validation-error-output instr)
            :instructions instr})))
@@ -187,7 +188,7 @@
 
 (def ^:private replace-sql-schema
   [:map {:closed true}
-   [:query_id [:or :string :int]]
+   [:query_id {:optional true} [:or :string :int]]
    [:checklist :string]
    [:new_query :string]])
 
@@ -207,14 +208,15 @@
           {:keys [valid? dialect error-message]} validation-result
           {:keys [query-id query query-content]} action-result]
       (if valid?
-        (let [structured  (assoc action-result :result-type :query)
-              instr       (instructions/replace-sql-query-instructions-for query-id)
-              results-url (streaming/query->question-url query)
+        (let [structured (assoc action-result :result-type :query)
+              instr      (instructions/replace-sql-query-instructions-for query-id)
               buffer-id  (first-code-editor-buffer-id)]
           {:output (format-query-output structured instr)
            :structured-output structured
            :instructions instr
-           :data-parts [(if buffer-id (code-edit-part buffer-id query-content) (streaming/navigate-to-part results-url))]})
+           :data-parts [(if buffer-id
+                          (code-edit-part buffer-id query-content)
+                          (streaming/navigate-to-part (streaming/query->question-url query)))]})
         (let [instr (instructions/sql-validation-error-instructions dialect error-message)]
           {:output (format-validation-error-output instr)
            :instructions instr})))

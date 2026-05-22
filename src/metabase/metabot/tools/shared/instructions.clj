@@ -82,9 +82,11 @@ Reference items using: [name](metabase://type/id)")
        "**If the returned SQL query is NOT correct:**\n\n"
        "- Make further refinements using this tool again\n\n"
        "**If the returned SQL query is correct:**\n\n"
-       "- Always provide a direct link using: "
-       "`[Updated Query](metabase://query/" query-id ")` "
-       "where Updated Query is a meaningful link text"))
+       (if query-id
+         (str "- Always provide a direct link using: "
+              "`[Updated Query](metabase://query/" query-id ")` "
+              "where Updated Query is a meaningful link text")
+         "- Explain that the SQL in the active editor has been updated and ask the user to review or run it")))
 
 (defn replace-sql-query-instructions-for
   "Generate instructions for a replaced SQL query, embedding the query ID
@@ -95,9 +97,11 @@ Reference items using: [name](metabase://type/id)")
        "**If the returned SQL query is NOT correct:**\n\n"
        "- Make further refinements using this tool or edit_sql_query again\n\n"
        "**If the returned SQL query is correct:**\n\n"
-       "- Always provide a direct link using: "
-       "`[Updated Query](metabase://query/" query-id ")` "
-       "where Updated Query is a meaningful link text"))
+       (if query-id
+         (str "- Always provide a direct link using: "
+              "`[Updated Query](metabase://query/" query-id ")` "
+              "where Updated Query is a meaningful link text")
+         "- Explain that the SQL in the active editor has been updated and ask the user to review or run it")))
 
 (defn sql-validation-error-instructions
   "Generate instructions for failed query validation. Matches Python `format_validation_error_instructions`."

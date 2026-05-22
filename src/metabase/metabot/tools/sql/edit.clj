@@ -50,20 +50,23 @@
   [{:keys [query-id edits queries-state]}]
   (log/info "Editing SQL query" {:query-id query-id :edit-count (count edits)})
 
-  ;; Look up query from in-memory state
-  (let [query-id (str query-id)
-        query (get queries-state query-id)]
+  (let [{resolved-query-id :query-id
+         query :query}
+        (metabot.tools.sql.common/resolve-query queries-state query-id)]
     (when-not query
-      (throw (ex-info (tru "Query {0} not found" query-id)
+      (throw (ex-info (if query-id
+                        (tru "Query {0} not found" (str query-id))
+                        (tru "No active SQL editor buffer found"))
                       {:agent-error? true
                        :query-id query-id
                        :available-queries (keys queries-state)})))
 
     (let [current-sql (metabot.u/extract-sql-content query)]
       (when-not current-sql
-        (throw (ex-info (tru "Query {0} is not a SQL query" query-id)
+        (throw (ex-info (tru "Query {0} is not a SQL query"
+                             (or resolved-query-id query-id "<active-buffer>"))
                         {:agent-error? true
-                         :query-id query-id})))
+                         :query-id (or resolved-query-id query-id)})))
 
       (let [;; Apply edits sequentially
             new-sql (reduce apply-sql-edit current-sql edits)
@@ -74,7 +77,8 @@
         (merge {:validation-result validation-result}
                (when valid?
                  (let [updated-query (metabot.tools.sql.common/update-query-sql query transpiled-sql)]
-                   {:action-result {:query-id      query-id
-                                    :query-content transpiled-sql
-                                    :query         updated-query
-                                    :database      (:database query)}})))))))
+                   {:action-result (cond-> {:query-content transpiled-sql
+                                            :query         updated-query
+                                            :database      (:database query)}
+                                     resolved-query-id
+                                     (assoc :query-id resolved-query-id))})))))))

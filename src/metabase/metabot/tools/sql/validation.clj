@@ -3,6 +3,7 @@
    [clojure.string :as str]
    [metabase.driver.util :as driver.u]
    [metabase.sql-tools.core :as sql-tools]
+   [metabase.util.log :as log]
    [metabase.util.malli :as mu]
    [metabase.util.malli.registry :as mr]))
 
@@ -71,6 +72,14 @@
   (boolean (and (string? sql)
                 (re-find #"\{\{|\[\[" sql))))
 
+(defn- python-runtime-import-error?
+  "True when SQLGlot failed before validation because the embedded Python runtime
+  could not import one of its modules. In that case we skip validation instead of
+  surfacing an internal error from Metabot."
+  [e]
+  (let [message (or (ex-message e) (str e))]
+    (str/includes? message "ModuleNotFoundError:")))
+
 (mr/def ::validation-result
   [:map
    [:valid? :boolean]
@@ -103,14 +112,23 @@
       {:valid? true
        :dialect dialect
        :transpiled-sql sql}
-      (let [{:keys [error-message transpiled-sql status]}
-            (sql-tools/transpile-sql sql mapped-dialect mapped-dialect)]
-        (merge
-         {:dialect dialect}
-         (case status
-           :success {:valid? true
-                     :transpiled-sql transpiled-sql}
-           :skipped {:valid? true
-                     :transpiled-sql transpiled-sql}
-           :error   {:valid? false
-                     :error-message error-message}))))))
+      (try
+        (let [{:keys [error-message transpiled-sql status]}
+              (sql-tools/transpile-sql sql mapped-dialect mapped-dialect)]
+          (merge
+           {:dialect dialect}
+           (case status
+             :success {:valid? true
+                       :transpiled-sql transpiled-sql}
+             :skipped {:valid? true
+                       :transpiled-sql transpiled-sql}
+             :error   {:valid? false
+                       :error-message error-message})))
+        (catch Exception e
+          (if (python-runtime-import-error? e)
+            (do
+              (log/warn e "Skipping SQL validation because the embedded Python runtime is missing modules")
+              {:valid? true
+               :dialect dialect
+               :transpiled-sql sql})
+            (throw e)))))))

@@ -1,3 +1,5 @@
+## syntax=docker/dockerfile:1.7
+
 ###################
 # STAGE 1: builder
 ###################
@@ -16,7 +18,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install wget apt-transport-h
     && apt install temurin-21-jdk -y \
     && curl -O https://download.clojure.org/install/linux-install-1.12.0.1488.sh \
     && chmod +x linux-install-1.12.0.1488.sh \
-    && ./linux-install-1.12.0.1488.sh
+    && ./linux-install-1.12.0.1488.sh \
     && curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ENV PATH="/root/.local/bin:$PATH"
@@ -30,9 +32,25 @@ RUN git config --global --add safe.directory /home/node
 RUN npm install -g bun
 
 # install frontend dependencies
-RUN bun install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile
 
-RUN INTERACTIVE=false CI=true MB_EDITION=$MB_EDITION bin/build.sh :version ${VERSION}
+RUN --mount=type=cache,target=/root/.m2/repository \
+    --mount=type=cache,target=/root/.gitlibs \
+    attempts=5; \
+        for attempt in $(seq 1 $attempts); do \
+            if [ -n "${VERSION}" ]; then \
+                INTERACTIVE=false CI=true MB_EDITION=$MB_EDITION bin/build.sh :version "${VERSION}" && break; \
+            else \
+                INTERACTIVE=false CI=true MB_EDITION=$MB_EDITION bin/build.sh && break; \
+            fi; \
+            status=$?; \
+            if [ "$attempt" -eq "$attempts" ]; then \
+                exit "$status"; \
+            fi; \
+            echo "Build attempt $attempt failed with exit code $status; retrying after transient dependency resolution failure..."; \
+            sleep $((attempt * 15)); \
+        done
 
 # ###################
 # # STAGE 2: runner

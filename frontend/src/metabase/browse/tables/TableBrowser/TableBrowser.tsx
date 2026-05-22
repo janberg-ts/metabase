@@ -56,9 +56,8 @@ const getReloadInterval = (
 ): number => (tables.some((t) => isSyncInProgress(t)) ? RELOAD_INTERVAL : 0);
 
 export const getTableUrl = (table: Table, metadata?: Metadata): string => {
-  const metadataTable = metadata?.table(table.id);
-  const question = metadataTable?.newQuestion();
-  return question ? Urls.question(question) : "";
+  void metadata;
+  return Urls.tableRowsQuery(table.db_id, table.id);
 };
 
 export const TableBrowser = _.compose(

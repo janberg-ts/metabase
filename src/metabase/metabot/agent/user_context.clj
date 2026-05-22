@@ -316,6 +316,8 @@
                 (te/lines
                  (format "Buffer ID: %s | Language: %s | Database ID: %s"
                          (:id buffer) (:language source) (:database_id source))
+                 (when-let [value (:value source)]
+                   (te/field "Current SQL query" (te/code value "sql")))
                  (when cursor
                    (format "Cursor: Line %s, Column %s" (:line cursor) (:column cursor)))
                  (when-let [{:keys [start end text]} selection]

@@ -2,7 +2,8 @@
   (:require
    [clojure.string :as str]
    [clojure.test :refer [deftest testing is]]
-   [metabase.metabot.tools.sql.validation :as metabot.tools.sql.validation]))
+   [metabase.metabot.tools.sql.validation :as metabot.tools.sql.validation]
+   [metabase.sql-tools.core :as sql-tools]))
 
 ;;;; contains-template-tags?
 
@@ -108,3 +109,20 @@
     (testing context
       (is (=? expected
               (metabot.tools.sql.validation/validate-sql dialect sql))))))
+
+(deftest validate-sql-runtime-import-error-test
+  (testing "Module import failures in the embedded Python runtime skip validation"
+    (with-redefs [sql-tools/transpile-sql (fn [& _]
+                                            (throw (ex-info "ModuleNotFoundError: No module named 'json'" {})))]
+      (is (=? {:valid? true
+               :dialect "postgres"
+               :transpiled-sql "SELECT id FROM users"}
+              (metabot.tools.sql.validation/validate-sql "postgres" "SELECT id FROM users"))))))
+
+(deftest validate-sql-unrelated-runtime-error-test
+  (testing "Non-import runtime failures still propagate"
+    (with-redefs [sql-tools/transpile-sql (fn [& _]
+                                            (throw (ex-info "unexpected sqlglot failure" {})))]
+      (is (thrown-with-msg? clojure.lang.ExceptionInfo
+                            #"unexpected sqlglot failure"
+                            (metabot.tools.sql.validation/validate-sql "postgres" "SELECT id FROM users"))))))

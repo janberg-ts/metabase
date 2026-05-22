@@ -138,3 +138,42 @@
               (is (string? output))
               (is (str/starts-with? instructions "The SQL query has a syntax error"))
               (is (str/starts-with? output "<result>\nSQL query construction failed.\n</result>\n<instructions>\nThe SQL query has a syntax error")))))))))
+
+(deftest edit-sql-query-active-buffer-fallback-test
+  (testing "edit_sql_query falls back to the active code editor buffer"
+    (mt/test-drivers #{:h2}
+      (mt/with-current-user (mt/user->id :crowberto)
+        (mt/with-temp [:model/Database {db-id :id} {:engine :h2}]
+          (let [memory (atom {:context {:user_is_viewing [{:type "code_editor"
+                                                           :buffers [{:id "qb"
+                                                                      :source {:language "sql"
+                                                                               :database_id db-id
+                                                                               :value "SELECT * FROM orders"}}]}]}})
+                result (binding [shared/*memory-atom* memory]
+                         (agent-sql/edit-sql-query-tool
+                          {:checklist "- [x] checked"
+                           :edits [{:old_string "SELECT *"
+                                    :new_string "SELECT id"}]}))]
+            (is (= "SELECT id FROM orders"
+                   (get-in result [:structured-output :query-content])))
+            (is (= "qb"
+                   (get-in result [:data-parts 0 :value :buffer_id])))))))))
+
+(deftest replace-sql-query-active-buffer-fallback-test
+  (testing "replace_sql_query falls back to the active code editor buffer"
+    (mt/test-drivers #{:h2}
+      (mt/with-current-user (mt/user->id :crowberto)
+        (mt/with-temp [:model/Database {db-id :id} {:engine :h2}]
+          (let [memory (atom {:context {:user_is_viewing [{:type "code_editor"
+                                                           :buffers [{:id "qb"
+                                                                      :source {:language "sql"
+                                                                               :database_id db-id
+                                                                               :value "SELECT * FROM orders"}}]}]}})
+                result (binding [shared/*memory-atom* memory]
+                         (agent-sql/replace-sql-query-tool
+                          {:checklist "- [x] checked"
+                           :new_query "SELECT id FROM orders"}))]
+            (is (= "SELECT id FROM orders"
+                   (get-in result [:structured-output :query-content])))
+            (is (= "qb"
+                   (get-in result [:data-parts 0 :value :buffer_id])))))))))

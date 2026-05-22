@@ -13,7 +13,9 @@
   (:require
    [metabase.lib-be.core :as lib-be]
    [metabase.lib.core :as lib]
+   [metabase.metabot.tools.shared :as shared]
    [metabase.metabot.tools.sql.validation :as metabot.tools.sql.validation]
+   [metabase.util :as u]
    [metabase.util.i18n :refer [tru]]
    [metabase.util.malli.registry :as mr]))
 
@@ -25,7 +27,7 @@
   - query :: query map that wraps the `query-content`,
   - database :: id of the database that query belongs to."
   [:map
-   [:query-id :any]
+   [:query-id {:optional true} :any]
    [:query-content :string]
    [:query :map]
    [:database :int]])
@@ -63,3 +65,44 @@
       :else
       (throw (ex-info (tru "Unsupported query format")
                       {:agent-error? true})))))
+
+(defn- code-editor-buffer?
+  [item]
+  (let [type-val (:type item)]
+    (= "code_editor"
+       (cond
+         (keyword? type-val) (name type-val)
+         (string? type-val) (u/lower-case-en type-val)
+         :else nil))))
+
+(defn current-code-editor-buffer
+  "Return the first active code editor buffer from the current metabot context."
+  []
+  (some->> (shared/current-context)
+           :user_is_viewing
+           (filter code-editor-buffer?)
+           first
+           :buffers
+           first))
+
+(defn ad-hoc-buffer-query
+  "Construct an ad hoc native query map from the active SQL editor buffer."
+  []
+  (let [buffer (current-code-editor-buffer)
+        source (:source buffer)
+        sql (:value source)
+        db-id (:database_id source)]
+    (when (and (string? sql) (not-empty sql) (integer? db-id))
+      {:type :native
+       :database db-id
+       :native {:query sql}})))
+
+(defn resolve-query
+  "Resolve a SQL query either from in-memory state by id or from the active code editor buffer."
+  [queries-state query-id]
+  (let [query-id-str (some-> query-id str)]
+    (if-let [query (and query-id-str (get queries-state query-id-str))]
+      {:query-id query-id-str
+       :query query}
+      (when-let [query (ad-hoc-buffer-query)]
+        {:query query}))))
