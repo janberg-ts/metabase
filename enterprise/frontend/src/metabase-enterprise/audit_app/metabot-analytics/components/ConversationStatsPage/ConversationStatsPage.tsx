@@ -4,11 +4,11 @@ import type { WithRouterProps } from "react-router";
 import { push } from "react-router-redux";
 import { t } from "ttag";
 
+import { MetabotAdminLayout } from "metabase/admin/ai/MetabotAdminLayout";
 import { SettingsPageWrapper } from "metabase/admin/components/SettingsSection";
 import { getErrorMessage } from "metabase/api/utils";
 import { useToast } from "metabase/common/hooks";
 import { useUrlState } from "metabase/common/hooks/use-url-state";
-import { MetabotAdminLayout } from "metabase/metabot/components/MetabotAdmin/MetabotAdminLayout";
 import { serializeDateParameterValue } from "metabase/querying/parameters/utils/parsing";
 import { useDispatch } from "metabase/redux";
 import { Button, Flex, SimpleGrid, Tabs, Title } from "metabase/ui";
@@ -153,6 +153,8 @@ export function ConversationStatsPage({ location }: WithRouterProps) {
   const usageLogAudit = useAuditTable(VIEW_USAGE_LOG);
   const groupMembersAudit = useAuditTable(VIEW_GROUP_MEMBERS);
 
+  const hasDataComplexityFeature = hasPremiumFeature("data-complexity-score");
+
   const sharedChartProps: ChartProps = {
     provider: conversationsAudit.provider,
     table: tableForMetric(
@@ -254,12 +256,21 @@ export function ConversationStatsPage({ location }: WithRouterProps) {
 
   return (
     <MetabotAdminLayout fullWidth>
-      <SettingsPageWrapper mt="sm" title={t`Usage stats`}>
+      <SettingsPageWrapper
+        mt="sm"
+        title={hasDataComplexityFeature ? t`Usage stats` : undefined}
+      >
         <DataComplexitySection />
         <Flex align="center" justify="space-between">
-          <Title order={3} display="flex" style={{ alignItems: "center" }}>
-            {t`Usage metrics`}
-          </Title>
+          {hasDataComplexityFeature ? (
+            <Title order={3} display="flex" style={{ alignItems: "center" }}>
+              {t`Usage metrics`}
+            </Title>
+          ) : (
+            <Title order={2} display="flex" style={{ alignItems: "center" }}>
+              {t`Usage stats`}
+            </Title>
+          )}
 
           <ConversationFilters
             date={date}

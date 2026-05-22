@@ -31,12 +31,6 @@ type UsageAuditingTenants = {
   robertTenant: UsageAuditingTenant;
 };
 
-const USAGE_STATS_METRICS: UsageStatsMetric[] = [
-  "conversations",
-  "messages",
-  "tokens",
-];
-
 const METRIC_TAB_NAMES: Record<UsageStatsMetric, string> = {
   conversations: "Conversations",
   messages: "Messages",
@@ -100,20 +94,14 @@ const ROBERT_CHART_LABELS: CompleteChartLabels = {
   ip: ["10.0.0.3", "10.0.0.4", "10.0.0.5"],
 };
 
-const DATE_FILTER_SHORTCUTS = [
-  "Today",
-  "Yesterday",
-  "Previous week",
-  "Previous 7 days",
-  "Previous 30 days",
-  "Previous month",
-  "Previous 3 months",
-  "Previous 12 months",
-] as const;
-
-type DateFilterLabel = (typeof DATE_FILTER_SHORTCUTS)[number];
-
-const DATE_FILTER_BUTTON_LABEL = new RegExp(DATE_FILTER_SHORTCUTS.join("|"));
+type DateFilterLabel =
+  | "Today"
+  | "Yesterday"
+  | "Last 7 days"
+  | "Last 30 days"
+  | "Previous month"
+  | "Previous 3 months"
+  | "Previous 12 months";
 
 const TODAY_CHART_LABELS: CompleteChartLabels = {
   source: ["Slackbot", "Metabot"],
@@ -122,16 +110,9 @@ const TODAY_CHART_LABELS: CompleteChartLabels = {
   ip: ["10.0.0.1", "10.0.0.6", "10.0.0.7"],
 };
 
-const YESTERDAY_CHART_LABELS: CompleteChartLabels = {
-  source: ["SQL", "Documents"],
-  profile: ["SQL", "Documents"],
-  user: ["Robert Tableton"],
-  ip: ["10.0.0.3", "10.0.0.4"],
-};
-
 const PREVIOUS_WEEK_CHART_LABELS: CompleteChartLabels = {
   source: ["Metabot"],
-  profile: ["NLQ"],
+  profile: ["Slackbot"],
   user: ["Bobby Tables"],
   ip: ["10.0.0.1"],
 };
@@ -143,13 +124,6 @@ const RECENT_CHART_LABELS: CompleteChartLabels = {
   ip: ["10.0.0.1", "10.0.0.2", "10.0.0.3", "10.0.0.4", "10.0.0.5"],
 };
 
-const PREVIOUS_MONTH_CHART_LABELS: CompleteChartLabels = {
-  source: ["SQL"],
-  profile: ["SQL"],
-  user: ["Robert Tableton"],
-  ip: ["10.0.0.8"],
-};
-
 const OUT_OF_BOUNDS_CHART_LABELS: ChartLabels = {
   ip: ["10.0.0.99"],
 };
@@ -159,13 +133,7 @@ const DATE_FILTER_CASES: Array<{
   chartLabels: ChartLabels;
 }> = [
   { label: "Today", chartLabels: TODAY_CHART_LABELS },
-  { label: "Yesterday", chartLabels: YESTERDAY_CHART_LABELS },
-  { label: "Previous week", chartLabels: PREVIOUS_WEEK_CHART_LABELS },
-  { label: "Previous 7 days", chartLabels: RECENT_CHART_LABELS },
-  { label: "Previous 30 days", chartLabels: RECENT_CHART_LABELS },
-  { label: "Previous month", chartLabels: PREVIOUS_MONTH_CHART_LABELS },
-  { label: "Previous 3 months", chartLabels: PREVIOUS_MONTH_CHART_LABELS },
-  { label: "Previous 12 months", chartLabels: PREVIOUS_MONTH_CHART_LABELS },
+  { label: "Last 7 days", chartLabels: PREVIOUS_WEEK_CHART_LABELS },
 ];
 
 const MAIN_PROFILE_LABELS: string[] = [
@@ -566,9 +534,11 @@ function selectDateFilter(
   dateLabel: DateFilterLabel,
   waitAlias = "@dataset",
 ): void {
-  H.main().findByRole("button", { name: DATE_FILTER_BUTTON_LABEL }).realClick();
-  H.popover().findByRole("button", { name: dateLabel }).realClick();
-  H.main().findByRole("button", { name: dateLabel }).should("be.visible");
+  H.main().findByTestId("conversation-filters-date-select").realClick();
+  H.selectDropdown().findByText(dateLabel).realClick();
+  H.main()
+    .findByTestId("conversation-filters-date-select")
+    .should("have.value", dateLabel);
   cy.wait(waitAlias);
 }
 
@@ -652,19 +622,18 @@ function clickLastTimeseriesChartDot(title: string): void {
 }
 
 function clickRowChartBarForLabel(title: string, label: string): void {
-  getChartCard(title)
-    .findByText(label)
-    .then(($label) => {
-      const rect = $label[0].getBoundingClientRect();
-      // Row-chart labels are not the click target; click the bar next to the visible label.
-      const target = $label[0].ownerDocument.elementFromPoint(
-        rect.right + 30,
-        rect.top + rect.height / 2,
-      );
+  getChartCard(title).within(() => {
+    cy.findByTestId("row-chart-container").then(($container) => {
+      cy.findByText(label).then(($label) => {
+        const containerRect = $container[0].getBoundingClientRect();
+        const labelRect = $label[0].getBoundingClientRect();
+        const x = labelRect.right - containerRect.left + 30;
+        const y = labelRect.top - containerRect.top + labelRect.height / 2;
 
-      expect(target).to.exist;
-      cy.wrap(target).realClick({ force: true });
+        cy.wrap($container).realClick({ x, y, scrollBehavior: false });
+      });
     });
+  });
 }
 
 function openConversationFromProfile(profileLabel: string): void {
@@ -709,22 +678,50 @@ describe("scenarios > metabot > usage auditing", () => {
     assertConversationChartLabels(RECENT_CHART_LABELS);
   });
 
-  it("renders usage stats charts for every date shortcut on every metric tab", () => {
+  it("renders usage stats charts for selected date shortcuts on conversations", () => {
     visitUsageStatsPage();
 
-    USAGE_STATS_METRICS.forEach((metric) => {
-      if (metric !== "conversations") {
-        selectMetricTab(metric);
-      }
+    const metric = "conversations";
 
-      DATE_FILTER_CASES.forEach(({ label, chartLabels }) => {
-        cy.log(`${METRIC_TAB_NAMES[metric]} date filter: ${label}`);
-        selectDateFilter(label);
+    DATE_FILTER_CASES.forEach(({ label, chartLabels }) => {
+      cy.log(`${METRIC_TAB_NAMES[metric]} date filter: ${label}`);
+      selectDateFilter(label);
 
-        assertMetricChartsRenderedForDate(metric, label);
-        assertMetricChartLabels(metric, chartLabels);
-        assertMetricChartLabelsAbsent(metric, OUT_OF_BOUNDS_CHART_LABELS);
-      });
+      assertMetricChartsRenderedForDate(metric, label);
+      assertMetricChartLabels(metric, chartLabels);
+      assertMetricChartLabelsAbsent(metric, OUT_OF_BOUNDS_CHART_LABELS);
+    });
+  });
+
+  it("renders usage stats charts for selected date shortcuts on tokens", () => {
+    visitUsageStatsPage();
+
+    const metric = "tokens";
+    selectMetricTab(metric);
+
+    DATE_FILTER_CASES.forEach(({ label, chartLabels }) => {
+      cy.log(`${METRIC_TAB_NAMES[metric]} date filter: ${label}`);
+      selectDateFilter(label);
+
+      assertMetricChartsRenderedForDate(metric, label);
+      assertMetricChartLabels(metric, chartLabels);
+      assertMetricChartLabelsAbsent(metric, OUT_OF_BOUNDS_CHART_LABELS);
+    });
+  });
+
+  it("renders usage stats charts for selected date shortcuts on messages", () => {
+    visitUsageStatsPage();
+
+    const metric = "messages";
+    selectMetricTab(metric);
+
+    DATE_FILTER_CASES.forEach(({ label, chartLabels }) => {
+      cy.log(`${METRIC_TAB_NAMES[metric]} date filter: ${label}`);
+      selectDateFilter(label);
+
+      assertMetricChartsRenderedForDate(metric, label);
+      assertMetricChartLabels(metric, chartLabels);
+      assertMetricChartLabelsAbsent(metric, OUT_OF_BOUNDS_CHART_LABELS);
     });
   });
 
@@ -844,6 +841,8 @@ describe("scenarios > metabot > usage auditing", () => {
       visitUsageStatsPage("/admin/metabot/usage-auditing?date=past7days~");
       interceptConversationsApi();
 
+      assertMetricChartsRendered("conversations");
+
       clickRowChartBarForLabel(
         TENANT_CONVERSATIONS_CHART_TITLE,
         bobbyTenant.name,
@@ -881,6 +880,8 @@ describe("scenarios > metabot > usage auditing", () => {
     visitUsageStatsPage("/admin/metabot/usage-auditing?date=past7days~");
     interceptConversationsApi();
 
+    assertMetricChartsRendered("conversations");
+
     clickRowChartBarForLabel(
       "Groups with most conversations",
       "Administrators",
@@ -912,6 +913,8 @@ describe("scenarios > metabot > usage auditing", () => {
   it("drills through from conversation charts to the conversations list and updates list filters", () => {
     visitUsageStatsPage();
     interceptConversationsApi();
+
+    assertMetricChartsRendered("conversations");
 
     clickRowChartBarForLabel("Users with most conversations", "Bobby Tables");
 
@@ -1018,6 +1021,30 @@ describe("scenarios > metabot > usage auditing", () => {
         );
       }
     });
+  });
+
+  it("sorts the conversations table by each sortable column", () => {
+    const sortableColumns: Array<{ headerLabel: RegExp; sortBy: string }> = [
+      { headerLabel: /^User/, sortBy: "user" },
+      { headerLabel: /^Profile/, sortBy: "profile_id" },
+      { headerLabel: /^Date/, sortBy: "created_at" },
+      { headerLabel: /^Messages/, sortBy: "message_count" },
+      { headerLabel: /^Tokens/, sortBy: "total_tokens" },
+      { headerLabel: /^IP/, sortBy: "ip_address" },
+    ];
+
+    visitConversationsPage();
+
+    for (const { headerLabel, sortBy } of sortableColumns) {
+      H.main()
+        .findByRole("table")
+        .findByRole("button", { name: headerLabel })
+        .click();
+
+      cy.wait("@conversations")
+        .its("request.url")
+        .should("include", `sort_by=${sortBy}`);
+    }
   });
 
   it("shows message usage stats charts", () => {

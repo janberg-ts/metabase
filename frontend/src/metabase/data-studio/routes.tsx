@@ -6,6 +6,7 @@ import {
   PLUGIN_DEPENDENCIES,
   PLUGIN_FEATURE_LEVEL_PERMISSIONS,
   PLUGIN_LIBRARY,
+  PLUGIN_WORKSPACES,
 } from "metabase/plugins";
 import type { State } from "metabase/redux/store";
 import { getDataStudioTransformRoutes } from "metabase/transforms/routes";
@@ -18,6 +19,7 @@ import { DependenciesSectionLayout } from "./app/pages/DependenciesSectionLayout
 import { DependencyDiagnosticsSectionLayout } from "./app/pages/DependencyDiagnosticsSectionLayout";
 import { GitSyncSectionLayout } from "./app/pages/GitSyncSectionLayout";
 import { TransformsSectionLayout } from "./app/pages/TransformsSectionLayout";
+import { WorkspacesSectionLayout } from "./app/pages/WorkspacesSectionLayout";
 import { getDataStudioMetadataRoutes } from "./data-model/routes";
 import { getDataStudioGlossaryRoutes } from "./glossary/routes";
 import {
@@ -31,6 +33,7 @@ export function getDataStudioRoutes(
   CanAccessDataStudio: ComponentType,
   CanAccessDataModel: ComponentType,
   _CanAccessTransforms: ComponentType,
+  IsAdmin: ComponentType,
 ) {
   return (
     <Route component={CanAccessDataStudio}>
@@ -42,15 +45,18 @@ export function getDataStudioRoutes(
         />
         <Route path="data" component={CanAccessDataModel}>
           <Route component={DataSectionLayout}>
-            {getDataStudioMetadataRoutes()}
+            {getDataStudioMetadataRoutes(IsAdmin)}
           </Route>
         </Route>
         <Route path="transforms" component={TransformsSectionLayout}>
           {getDataStudioTransformRoutes()}
         </Route>
+        <Route component={WorkspacesSectionLayout}>
+          {PLUGIN_WORKSPACES.getDataStudioRoutes()}
+        </Route>
         {getDataStudioGlossaryRoutes()}
         {PLUGIN_LIBRARY.isEnabled ? (
-          PLUGIN_LIBRARY.getDataStudioLibraryRoutes()
+          PLUGIN_LIBRARY.getDataStudioLibraryRoutes(IsAdmin)
         ) : (
           <Route path="library" component={LibraryUpsellPage} />
         )}
